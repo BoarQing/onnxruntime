@@ -455,6 +455,21 @@ vaip_core::OrtApiForVaip* create_org_api_hook() {
     graph.SetInputs(inputs);
   };
 
+  the_global_api.model_get_opset = [](const Model& model) -> vaip_core::DllSafe<std::vector<std::pair<std::string, int64_t>>> {
+    std::vector<std::pair<std::string, int64_t>> ret;
+    auto& mut_model = const_cast<onnxruntime::Model&>(model);
+    auto model_proto = mut_model.ToProto();
+    auto size = model_proto->opset_import_size();
+    for (int i = 0; i < size; ++i) {
+      auto opset = model_proto->mutable_opset_import(i);
+      ret.push_back(std::make_pair(*opset->mutable_domain(), opset->version()));
+    }
+    return vaip_core::DllSafe(ret);
+  };
+  the_global_api.model_get_ir_version = [](const Model& model) -> int64_t {
+    return model.IrVersion();
+  };
+
   if (!s_library_vitisaiep.vaip_get_version) {
     return reinterpret_cast<vaip_core::OrtApiForVaip*>(&(the_global_api.host_));
   } else {

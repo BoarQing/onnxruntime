@@ -930,6 +930,7 @@ struct Model final {
   std::unique_ptr<ONNX_NAMESPACE::ModelProto> ToProto() { return g_host->Model__ToProto(this); }
   std::unique_ptr<ONNX_NAMESPACE::ModelProto> ToGraphProtoWithExternalInitializers(const std::filesystem::path& external_file_name, const std::filesystem::path& file_path, size_t initializer_size_threshold) { return g_host->Model__ToGraphProtoWithExternalInitializers(this, external_file_name, file_path, initializer_size_threshold); }
   const ModelMetaData& MetaData() const noexcept { return g_host->Model__MetaData(this); }
+  int64_t IrVersion() const { return g_host->Model__IrVersion(this); }
 
   Model() = delete;
   Model(const Model&) = delete;
