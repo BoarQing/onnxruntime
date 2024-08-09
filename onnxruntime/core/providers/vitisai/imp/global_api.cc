@@ -58,7 +58,6 @@ struct OrtVitisAIEpAPI {
     if (handle_)
       return;
     auto& env = Provider_GetHost()->Env__Default();
-    auto& logger = *Provider_GetHost()->LoggingManager_GetDefaultLogger();
 #ifdef _WIN32
     // this dll is already linked to the executable, normally a test program
     handle_ = reinterpret_cast<void*>(GetModuleHandle(TEXT("onnxruntime_vitisai_ep.dll")));
@@ -72,16 +71,13 @@ struct OrtVitisAIEpAPI {
 #endif
     ORT_THROW_IF_ERROR(env.GetSymbolFromLibrary(handle_, "initialize_onnxruntime_vitisai_ep", (void**)&initialize_onnxruntime_vitisai_ep));
     auto status = env.GetSymbolFromLibrary(handle_, "compile_onnx_model_vitisai_ep_with_options", (void**)&compile_onnx_model_with_options);
-    if (status.IsOK()) {
+    if (!status.IsOK()) {
       ::onnxruntime::LogRuntimeError(0, status, __FILE__, static_cast<const char*>(__FUNCTION__), __LINE__);
       ORT_THROW(status);
     }
     std::ignore = env.GetSymbolFromLibrary(handle_, "vaip_get_version",
                                            (void**)&vaip_get_version);
-    status = (env.GetSymbolFromLibrary(handle_, "create_ep_context_nodes", (void**)&create_ep_context_nodes));
-    if (!status.IsOK()) {
-      LOGS(logger, WARNING) << "create_ep_context_nodes is not defined, please upgrade onnxruntime_vitisai_ep.dll. However, it still works.";
-    }
+    ORT_THROW_IF_ERROR(env.GetSymbolFromLibrary(handle_, "create_ep_context_nodes", (void**)&create_ep_context_nodes));
   }
 
  private:

@@ -110,19 +110,4 @@ bool GetEPContextModelFileLocation(
   return !ep_ctx_model_file_loc.empty();
 }
 
-// The file for EP context cache is in the same folder as the EP context model file.
-PathString GetEPContextCacheFileLocation(
-    const PathString& ep_ctx_model_file_loc, const PathString& model_path_str) {
-  if (!ep_ctx_model_file_loc.empty()) {
-    fs::path ep_ctx_model_fs_path(ep_ctx_model_file_loc);
-    fs::path ep_ctx_cache_fs_path(ep_ctx_model_fs_path.parent_path() / ep_ctx_model_fs_path.stem());
-    ep_ctx_cache_fs_path += fs::path("__ep_ctx_cache.bin");
-    return ToPathString(ep_ctx_cache_fs_path.string());
-  }
-  fs::path model_fs_path(model_path_str);
-  fs::path ep_ctx_cache_fs_path(model_fs_path.parent_path() / model_fs_path.stem());
-  ep_ctx_cache_fs_path += fs::path("__ep_ctx_cache.bin");
-  return ToPathString(ep_ctx_cache_fs_path.string());
-}
-
 }  // namespace onnxruntime
