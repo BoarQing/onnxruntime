@@ -59,7 +59,6 @@ class VitisAIExecutionProvider : public IExecutionProvider {
   bool ep_ctx_enabled_ = false;
   bool ep_ctx_embed_mode_ = true;
   std::string ep_ctx_model_path_cfg_{""};
-  mutable std::string backend_cache_data_{""};
   mutable PathString model_path_str_{};
   mutable PathString ep_ctx_model_file_loc_{};
   mutable std::unique_ptr<onnxruntime::Model> p_ep_ctx_model_;
@@ -68,7 +67,6 @@ class VitisAIExecutionProvider : public IExecutionProvider {
   // the EP context model that is compiled AOT/offline.
   void LoadEPContexModelFromFile() const;
   void PrepareEPContextEnablement(const onnxruntime::GraphViewer&) const;
-  void FulfillEPContextEnablement(const std::vector<FusedNodeAndGraph>&);
 };
 
 }  // namespace onnxruntime

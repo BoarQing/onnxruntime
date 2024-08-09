@@ -88,44 +88,10 @@ void VitisAIExecutionProvider::LoadEPContexModelFromFile() const {
 
 void VitisAIExecutionProvider::PrepareEPContextEnablement(
     const onnxruntime::GraphViewer& graph_viewer) const {
-  if (model_path_str_.empty()) {
-    // TODO: platform dependency (Linux vs Windows).
-    model_path_str_ = ToPathString(GetTopLevelModelPath(graph_viewer).string());
-  }
-  std::string backend_cache_dir, backend_cache_key;
-  get_backend_compilation_cache(model_path_str_, graph_viewer, info_, kXCCode | kDDCode | kVCode, backend_cache_dir, backend_cache_key, backend_cache_data_);
-  info_["cacheDir"] = backend_cache_dir;
-  info_["cacheKey"] = backend_cache_key;
   // Create a new model, reusing the graph name, the op-domain-to-opset-version map,
   // the op schema registry of the current graph, etc.
   p_ep_ctx_model_ = graph_viewer.CreateModel(*GetLogger());
   LOGS_DEFAULT(VERBOSE) << "Container model created";
-}
-
-void VitisAIExecutionProvider::FulfillEPContextEnablement(
-    const std::vector<FusedNodeAndGraph>& fused_nodes_and_graphs) {
-  auto& ep_ctx_graph = p_ep_ctx_model_->MainGraph();
-  if (!ep_ctx_embed_mode_) {
-    auto ep_ctx_cache_path_str = GetEPContextCacheFileLocation(ep_ctx_model_file_loc_, model_path_str_);
-    std::ofstream ep_ctx_cache_ofs(ep_ctx_cache_path_str.c_str(), std::ios::trunc | std::ios::binary);
-    if (!ep_ctx_cache_ofs.is_open()) {
-      ORT_THROW("Failed to open a file to write EP context cache: ", ep_ctx_cache_path_str.c_str());
-    }
-    ep_ctx_cache_ofs.write(backend_cache_data_.c_str(), backend_cache_data_.length());
-    if (!ep_ctx_cache_ofs.good()) {
-      ep_ctx_cache_ofs.close();
-      ORT_THROW("Exception writing EP context cache file: ", ep_ctx_cache_path_str.c_str());
-    }
-    ep_ctx_cache_ofs.close();
-    CreateEPContexNodes(&ep_ctx_graph, fused_nodes_and_graphs, "", PathToUTF8String(ep_ctx_cache_path_str), 0, info_.at("cacheDir"), info_.at("cacheKey"), false, GetLogger());
-  } else {
-    CreateEPContexNodes(&ep_ctx_graph, fused_nodes_and_graphs, backend_cache_data_, "", 1, info_["cacheDir"], info_["cacheKey"], false, GetLogger());
-  }
-  if (GraphHasEPContextNode(ep_ctx_graph)) {
-    LOGS_DEFAULT(VERBOSE) << "Created model has EP context nodes";
-  } else {
-    LOGS_DEFAULT(WARNING) << "No EP eontext nodes created";
-  }
 }
 
 std::vector<std::unique_ptr<ComputeCapability>> VitisAIExecutionProvider::GetCapability(
@@ -137,29 +103,11 @@ std::vector<std::unique_ptr<ComputeCapability>> VitisAIExecutionProvider::GetCap
           ep_ctx_model_path_cfg_, model_path_str_, is_ep_ctx_model, ep_ctx_model_file_loc_)) {
     if (is_ep_ctx_model) {
       LOGS_DEFAULT(VERBOSE) << "An EP context model passed in";
-      ValidateEPContextNode(graph_viewer.GetGraph());
-      std::string cache_dir, cache_key;
-      RetrieveBackendCacheInfo(graph_viewer.GetGraph(), cache_dir, cache_key);
-      info_["cacheDir"] = cache_dir;
-      info_["cacheKey"] = cache_key;
       LOGS_DEFAULT(VERBOSE) << "Trying getting compilation cache from " << PathToUTF8String(ep_ctx_model_file_loc_);
-      auto ep_ctx_payload = RetrieveEPContextCache(graph_viewer.GetGraph(), ep_ctx_model_file_loc_, true);
-      restore_backend_compilation_cache(cache_dir, cache_key, ep_ctx_payload, graph_viewer.ModelPath().string());
     } else {
       if (fs::exists(ep_ctx_model_file_loc_) && fs::is_regular_file(ep_ctx_model_file_loc_) && ep_ctx_enabled_) {
         ORT_THROW("The inference session was created with a normal ONNX model but a model file with EP context cache exists at ",
                   PathToUTF8String(ep_ctx_model_file_loc_), ". Please remove the EP context model manually if you want to re-generate it.");
-        // Disable the flexibility implemented below by throwing an exception.
-        // Now the code below is unreachable but DCE will take care of it.
-        // We might want to re-enable it in future, so we keep it as is.
-        LoadEPContexModelFromFile();
-        ValidateEPContextNode(p_ep_ctx_model_->MainGraph());
-        std::string cache_dir, cache_key;
-        RetrieveBackendCacheInfo(p_ep_ctx_model_->MainGraph(), cache_dir, cache_key);
-        info_["cacheDir"] = cache_dir;
-        info_["cacheKey"] = cache_key;
-        auto ep_ctx_payload = RetrieveEPContextCache(p_ep_ctx_model_->MainGraph(), ep_ctx_model_file_loc_, false);
-        restore_backend_compilation_cache(cache_dir, cache_key, ep_ctx_payload, graph_viewer.ModelPath().string());
       }
     }
   } else {
@@ -211,9 +159,6 @@ common::Status VitisAIExecutionProvider::Compile(const std::vector<FusedNodeAndG
       return Status::OK();
     };
     node_compute_funcs.push_back(compute_info);
-  }
-  if (ep_ctx_enabled_ && p_ep_ctx_model_ && !has_create_ep_context_nodes()) {
-    FulfillEPContextEnablement(fused_nodes_and_graphs);
   }
   return Status::OK();
 }
