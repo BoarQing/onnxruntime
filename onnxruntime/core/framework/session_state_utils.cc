@@ -110,13 +110,11 @@ static common::Status DeserializeTensorProto(const Env& env, const std::basic_st
       Tensor::InitOrtValue(std::move(tensor), ort_value);
       return common::Status::OK();
     } else if (device == default_cpu_device) {
-      // for external initializer on CPU we will use mmap for large initializers so don't need to allocate memory in advance
-
-      // NB: The file containing external data for the tensor is mmap'd. If the tensor will be used on CPU we can
-      // utilize the mmap'd buffer directly.
-      ORT_RETURN_IF_ERROR(utils::GetExtDataFromTensorProto(env, proto_path, tensor_proto,
-                                                           ort_value,
-                                                           &prepacked_for_graph));
+      ORT_RETURN_IF_ERROR(AllocateTensor(memory_buffer, tensor, type, tensor_shape,
+                                       use_device_allocator_for_initializers, alloc));
+      // deserialize directly to CPU tensor
+      ORT_RETURN_IF_ERROR(utils::TensorProtoToTensor(env, proto_path.c_str(), tensor_proto, tensor));
+      Tensor::InitOrtValue(std::move(tensor), ort_value);
       return common::Status::OK();
     } else {  // non-cpu tensor or tensor in a cpu accessible memory
       if (utils::HasString(tensor_proto)) {
