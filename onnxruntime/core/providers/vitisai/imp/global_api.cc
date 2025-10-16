@@ -592,6 +592,8 @@ struct ExternalEpLibaray {
     Ensure();
   }
   onnxruntime::Provider* (*get_provider_api)();
+  void (*create_ep_factories)(void*, const OrtApiBase*, void*, OrtEpFactory**, size_t, size_t*);
+  void (*set_session_option)(OrtSessionOptions*);
 
   void Ensure() {
     if (handle_)
@@ -601,8 +603,10 @@ struct ExternalEpLibaray {
     auto full_path = env.GetRuntimePath() + library_filename;
     ORT_THROW_IF_ERROR(env.LoadDynamicLibrary(full_path, true, &handle_));
     ORT_THROW_IF_ERROR(env.GetSymbolFromLibrary(handle_, "GetProvider", (void**)&get_provider_api));
-    get_provider_api()->Initialize();
+    env.GetSymbolFromLibrary(handle_, "CreateEpFactories", (void**)&create_ep_factories);
+    env.GetSymbolFromLibrary(handle_, "RyzenAI_SetSessionOptions", (void**)&set_session_option);
   }
+
   void Clear() {
     if (handle_) {
       auto& env = Provider_GetHost()->Env__Default();
@@ -625,9 +629,24 @@ CreateExecutionProviderFromAnotherEp(const std::string& lib, const OrtSessionOpt
   if (it == g_external_ep_libaries.end()) {
     it = g_external_ep_libaries.emplace(lib, std::make_unique<ExternalEpLibaray>(lib)).first;
   }
-  auto get_provider_func = it->second->get_provider_api;
+  auto ep_lib = it->second.get();
+  auto get_provider_func = ep_lib->get_provider_api;
   auto provider = get_provider_func();
   std::unique_ptr<onnxruntime::IExecutionProvider> ret;
+  auto api_base = Provider_GetHost()->OrtGetApiBase();
+  if (ep_lib->create_ep_factories) {
+    OrtEpFactory* factory = nullptr;
+    size_t num = 1;
+    ep_lib->create_ep_factories(nullptr, api_base, nullptr, &factory, num, &num);
+  }
+  if (ep_lib->set_session_option) {
+    ep_lib->set_session_option(const_cast<OrtSessionOptions*>(&session_options));
+  }
+  if (const auto api = api_base->GetApi(ORT_API_VERSION)) {
+    auto path = PathString(LIBRARY_PREFIX) + PathString(lib.begin(), lib.end()) + LIBRARY_EXTENSION;
+    api->RegisterCustomOpsLibrary_V2(const_cast<OrtSessionOptions*>(&session_options), path.c_str());
+  }
+  provider->Initialize();
   std::ignore = provider->CreateIExecutionProvider(nullptr, nullptr, 0, const_cast<onnxruntime::ProviderOptions&>(provider_options), session_options, *((OrtLogger*)nullptr), ret);
 
   return ret;
