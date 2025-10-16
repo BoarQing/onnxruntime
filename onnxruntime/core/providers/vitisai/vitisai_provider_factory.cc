@@ -7,7 +7,6 @@
 #include <cctype>
 #include <unordered_map>
 #include <string>
-
 #include "vaip/global_api.h"
 #include "./vitisai_execution_provider.h"
 #include "core/framework/execution_provider.h"
@@ -28,10 +27,7 @@ struct VitisAIProviderFactory : IExecutionProviderFactory {
 };
 
 std::unique_ptr<IExecutionProvider> VitisAIProviderFactory::CreateProvider() {
-  auto it = info_.find("external_ep_libray");
-  if (it != info_.end()) {
-   return CreateExecutionProviderFromAnotherEp(*it, info_);
-  }
+  // can not get session options, so this api can't create anotherep
   return std::make_unique<VitisAIExecutionProvider>(info_);
 }
 
@@ -60,9 +56,14 @@ std::unique_ptr<IExecutionProvider> VitisAIProviderFactory::CreateProvider(const
       provider_options["ort_session_config." + key] = value;
     }
   }
-  auto it = provider_options.find("external_ep_libray");
+
+  auto it = provider_options.find("llm");  // to be finalized
+  if (it != provider_options.end() && info_.find("external_ep_library") == info_.end()) {
+    provider_options["external_ep_libray"] = "onnxruntime_providers_ryzenai";
+  }
+  it = provider_options.find("external_ep_libray");
   if (it != provider_options.end()) {
-    return CreateExecutionProviderFromAnotherEp(*it, provider_options);
+    return CreateExecutionProviderFromAnotherEp(it->second, session_options, provider_options);
   }
   auto ep_instance = std::make_unique<VitisAIExecutionProvider>(provider_options);
   ep_instance->SetLogger(reinterpret_cast<const logging::Logger*>(&session_logger));
@@ -88,7 +89,7 @@ struct VitisAI_Provider : Provider {
     }
   };
   // Get provider specific custom op domain list. Provider has the resposibility to release OrtCustomOpDomain instances it creates.
-  void GetCustomOpDomainList(IExecutionProviderFactory*, std::vector<OrtCustomOpDomain*>&) override {};
+  void GetCustomOpDomainList(IExecutionProviderFactory*, std::vector<OrtCustomOpDomain*>&) override{};
   // Called right after loading the shared library, if this throws any errors Shutdown() will be called and the library unloaded
   void Initialize() override { initialize_vitisai_ep(); }
   // Called right before unloading the shared library

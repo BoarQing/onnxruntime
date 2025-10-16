@@ -591,25 +591,17 @@ struct ExternalEpLibaray {
   ExternalEpLibaray(const std::string& libray_name) : libray_name_{libray_name} {
     Ensure();
   }
-  onnxruntime::Provider* (*GetProvider)();
+  onnxruntime::Provider* (*get_provider_api)();
 
   void Ensure() {
     if (handle_)
       return;
     auto& env = Provider_GetHost()->Env__Default();
-#ifdef _WIN32
-    // this dll is already linked to the executable, normally a test program
-    if (!handle_) {
-      // First try loading with full path
-      auto library_filename = PathString(libray_name_.c_str());
-      auto module_relative_full_path = env.GeRuntimePath() + PathString(LIBRARY_PREFIX ORT_TSTR("onnxruntime_vitisai_ep") LIBRARY_EXTENSION);
-      ORT_THROW_IF_ERROR(env.LoadDynamicLibrary(module_relative_full_path, true, &handle_));
-    }
-#else
-    auto full_path = env.GetRuntimePath() + PathString(LIBRARY_PREFIX ORT_TSTR("onnxruntime_vitisai_ep") LIBRARY_EXTENSION);
+    auto library_filename = PathString(LIBRARY_PREFIX) + PathString(libray_name_.begin(), libray_name_.end()) + LIBRARY_EXTENSION;
+    auto full_path = env.GetRuntimePath() + library_filename;
     ORT_THROW_IF_ERROR(env.LoadDynamicLibrary(full_path, true, &handle_));
-#endif
-    ORT_THROW_IF_ERROR(env.GetSymbolFromLibrary(handle_, "GetProvider", (void**)&GetProvider));
+    ORT_THROW_IF_ERROR(env.GetSymbolFromLibrary(handle_, "GetProvider", (void**)&get_provider_api));
+    get_provider_api()->Initialize();
   }
   void Clear() {
     if (handle_) {
@@ -624,16 +616,19 @@ struct ExternalEpLibaray {
   std::string libray_name_;
   void* handle_{};
 };
-static std::unordered_map<std::string, ExternalEpLibaray> g_external_ep_libaries;
+static std::unordered_map<std::string, std::unique_ptr<ExternalEpLibaray>> g_external_ep_libaries;
 
-std::unique_ptr<IExecutionProvider>
-CreateExecutionProviderFromAnotherEp(const std::string& lib,
+std::unique_ptr<onnxruntime::IExecutionProvider>
+CreateExecutionProviderFromAnotherEp(const std::string& lib, const OrtSessionOptions& session_options,
                                      std::unordered_map<std::string, std::string>& provider_options) {
   auto it = g_external_ep_libaries.find(lib);
   if (it == g_external_ep_libaries.end()) {
-    it = g_external_ep_libaries.emplace(lib).first;
+    it = g_external_ep_libaries.emplace(lib, std::make_unique<ExternalEpLibaray>(lib)).first;
   }
-  auto ep_factory= it->second->GetProvider()->CreateExecutionProviderFactory(static_cast<void*>(&provider_options));
-  auto ep = ep_factory->CreateProvider();
-  return ep;
+  auto get_provider_func = it->second->get_provider_api;
+  auto provider = get_provider_func();
+  std::unique_ptr<onnxruntime::IExecutionProvider> ret;
+  std::ignore = provider->CreateIExecutionProvider(nullptr, nullptr, 0, const_cast<onnxruntime::ProviderOptions&>(provider_options), session_options, *((OrtLogger*)nullptr), ret);
+
+  return ret;
 }
