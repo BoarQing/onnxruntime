@@ -7,7 +7,6 @@
 #include <cctype>
 #include <unordered_map>
 #include <string>
-
 #include "vaip/global_api.h"
 #include "./vitisai_execution_provider.h"
 #include "core/framework/execution_provider.h"
@@ -28,6 +27,7 @@ struct VitisAIProviderFactory : IExecutionProviderFactory {
 };
 
 std::unique_ptr<IExecutionProvider> VitisAIProviderFactory::CreateProvider() {
+  // can not get session options, so this api can't create anotherep
   return std::make_unique<VitisAIExecutionProvider>(info_);
 }
 
@@ -57,6 +57,14 @@ std::unique_ptr<IExecutionProvider> VitisAIProviderFactory::CreateProvider(const
     }
   }
 
+  auto it = provider_options.find("llm");  // to be finalized
+  if (it != provider_options.end() && info_.find("external_ep_library") == info_.end()) {
+    provider_options["external_ep_libray"] = "onnxruntime_providers_ryzenai";
+  }
+  it = provider_options.find("external_ep_libray");
+  if (it != provider_options.end()) {
+    return CreateExecutionProviderFromAnotherEp(it->second, session_options, provider_options);
+  }
   auto ep_instance = std::make_unique<VitisAIExecutionProvider>(provider_options);
   ep_instance->SetLogger(reinterpret_cast<const logging::Logger*>(&session_logger));
   return ep_instance;
